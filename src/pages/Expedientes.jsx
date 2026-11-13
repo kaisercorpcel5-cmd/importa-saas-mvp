@@ -7,6 +7,7 @@ import { Plus, FolderOpen, Ship, Calendar, Package, Trash2, PauseCircle, PlayCir
 import Proforma from './Proforma';
 import CotizacionesFlete from './CotizacionesFlete';
 import Comparador from './Comparador';
+import Costeo from './Costeo';
 
 export default function Expedientes() {
   const [expedientes, setExpedientes] = useState([]);
@@ -139,11 +140,15 @@ export default function Expedientes() {
           <button onClick={() => setPestañaActiva('comparador')} className={`px-6 py-3 font-medium text-sm transition-colors ${pestañaActiva === 'comparador' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
             3. Comparador
           </button>
+          <button onClick={() => setPestañaActiva('costeo')} className={`px-6 py-3 font-medium text-sm transition-colors ${pestañaActiva === 'costeo' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
+  4. Costeo Final
+</button>
         </div>
 
         {pestañaActiva === 'proforma' && <Proforma expediente={expedienteSeleccionado} onVolver={() => { }} />}
         {pestañaActiva === 'cotizaciones' && <CotizacionesFlete expediente={expedienteSeleccionado} />}
         {pestañaActiva === 'comparador' && <Comparador expediente={expedienteSeleccionado} />}
+        {pestañaActiva === 'costeo' && <Costeo expediente={expedienteSeleccionado} />}
       </div>
     );
   }

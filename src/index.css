@@ -1,1 +1,47 @@
 @import "tailwindcss";
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+  
+  .print-area, .print-area * {
+    visibility: visible;
+  }
+  
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* 🔥 ACHICAR LOS GRÁFICOS PARA QUE QUEPAN EN LA HOJA 1 */
+  .graficos-print {
+    height: 180px !important; /* Antes eran 288px, ahora 180px */
+    margin-bottom: 10px !important;
+  }
+
+  /* 🔥 FORZAR QUE LA TABLA EMPIECE EN UNA NUEVA HOJA */
+  .tabla-print {
+    page-break-before: always !important;
+  }
+
+  /* Ajustar tabla para que no se corte */
+  table {
+    width: 100% !important;
+    font-size: 10px !important;
+  }
+  
+  th, td {
+    padding: 4px 6px !important;
+  }
+}

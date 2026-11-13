@@ -4,7 +4,7 @@ export const CATALOGO_CONCEPTOS = [
   // ==========================================
   { id: 'ocean_freight', nombre: 'Ocean Freight (Flete Marítimo)', tipo: 'flete', afectoIGV: false, unidadMedida: 'CONT' },
   { id: 'baf_fsc', nombre: 'BAF / FSC (Recargo Combustible)', tipo: 'flete', afectoIGV: false, unidadMedida: 'CONT' },
-  { id: 'seguro', nombre: 'Seguro de Carga Internacional', tipo: 'flete', afectoIGV: false, unidadMedida: 'BL' }, // Se cobra 1 vez por BL
+  { id: 'seguro', nombre: 'Seguro de Carga Internacional', tipo: 'flete', afectoIGV: false, unidadMedida: 'BL' },
 
   // ==========================================
   // GASTOS EN ORIGEN (EXW / FCA) - No afecto a IGV
@@ -13,12 +13,17 @@ export const CATALOGO_CONCEPTOS = [
   { id: 'thc_origen', nombre: 'THC Origen (OHC)', tipo: 'origen', afectoIGV: false, unidadMedida: 'CONT' },
   { id: 'doc_origen', nombre: 'Documentation Fee Origen', tipo: 'origen', afectoIGV: false, unidadMedida: 'BL' },
   { id: 'gate_in_origen', nombre: 'Gate In Origen', tipo: 'origen', afectoIGV: false, unidadMedida: 'CONT' },
-  { id: 'despacho_export', nombre: 'Despacho Aduanero Exportación', tipo: 'origen', afectoIGV: false, unidadMedida: 'BL' },
 
   // ==========================================
   // GASTOS EN DESTINO (Locales) - Afecto a IGV
   // ==========================================
   { id: 'handling', nombre: 'Handling / Manipuleo', tipo: 'destino', afectoIGV: true, unidadMedida: 'BL' },
+  { id: 'gate_in', nombre: 'Gate In / Gate Out', tipo: 'destino', afectoIGV: true, unidadMedida: 'CONT' },
+  { id: 'gastos_operativos', nombre: 'Gastos Operativos / Comisión', tipo: 'destino', afectoIGV: true, unidadMedida: 'FIJO' },
+  
+  // 🔥 SEGURO EN DESTINO (Para cuando el agente lo cobra con IGV)
+  { id: 'seguro_destino', nombre: 'Seguro de Carga (Cobrado en Destino + IGV)', tipo: 'destino', afectoIGV: true, unidadMedida: 'BL' },
+  
   { id: 'thc_destino', nombre: 'THC Destino (DHC)', tipo: 'destino', afectoIGV: true, unidadMedida: 'CONT' },
   { id: 'doc_destino', nombre: 'Documentation Fee Destino (DO / DDF)', tipo: 'destino', afectoIGV: true, unidadMedida: 'BL' },
   { id: 'bl_fee', nombre: 'BL Fee / Telex Release', tipo: 'destino', afectoIGV: true, unidadMedida: 'BL' },

@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { obtenerCotizacionesPorExpediente, crearCotizacionFlete, actualizarCotizacionFlete } from '../services/cotizacionesFleteService';
 import { obtenerAgentes } from '../services/agentesService';
 import { obtenerProformaPorExpediente } from '../services/proformasService';
-import { obtenerProveedores } from '../services/proveedoresService'; // 🔥 Importamos proveedores
-import { Plus, Ship, Calendar, Trash2 } from 'lucide-react';
+import { obtenerProveedores } from '../services/proveedoresService';
+import { Plus, Ship, Calendar, Trash2, DollarSign, Clock, MapPin } from 'lucide-react';
 import { CATALOGO_CONCEPTOS } from '../logic/catalogoConceptos';
 import { db } from '../firebase';
 import { deleteDoc, doc } from 'firebase/firestore';
@@ -15,7 +15,6 @@ export default function CotizacionesFlete({ expediente }) {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [cotizacionEditandoId, setCotizacionEditandoId] = useState(null);
   
-  // 🔥 Estado para el país de la proforma
   const [paisOrigenProforma, setPaisOrigenProforma] = useState('CN');
 
   // CABECERA
@@ -25,8 +24,15 @@ export default function CotizacionesFlete({ expediente }) {
   const [incoterm, setIncoterm] = useState('FOB');
   const [tipoContenedor, setTipoContenedor] = useState('40HC');
   const [cantidadContenedores, setCantidadContenedores] = useState(1);
-  const [diasLibresOrigen, setDiasLibresOrigen] = useState(0);
-  const [diasLibresDestino, setDiasLibresDestino] = useState(15);
+  
+  // CAMPOS EXTRA
+  const [frecuencia, setFrecuencia] = useState('SEMANAL');
+  const [condicionPago, setCondicionPago] = useState('CONTADO');
+  const [fechaVigencia, setFechaVigencia] = useState('');
+  const [diasSobrestadia, setDiasSobrestadia] = useState(0);
+  const [diasAlmacenaje, setDiasAlmacenaje] = useState(0);
+  const [almacenDestino, setAlmacenDestino] = useState('');
+  const [transitTime, setTransitTime] = useState(0); // 🔥 NUEVO CAMPO
 
   const [puertoOrigen, setPuertoOrigen] = useState('');
   const [puertoDestino, setPuertoDestino] = useState('Callao (PECLL)');
@@ -40,21 +46,17 @@ export default function CotizacionesFlete({ expediente }) {
     const cargarDatos = async () => {
       setCargando(true);
       
-      // 1. Cargar cotizaciones y agentes
       const dataCot = await obtenerCotizacionesPorExpediente(expediente.id);
       setCotizaciones(dataCot);
       const dataAgentes = await obtenerAgentes();
       setAgentes(dataAgentes);
       
-      // 2. Cargar la Proforma y buscar el país
       const proforma = await obtenerProformaPorExpediente(expediente.id);
       
       if (proforma) {
         if (proforma.paisOrigen) {
-          // Si la proforma ya tiene el país (nuevas), lo usamos
           setPaisOrigenProforma(proforma.paisOrigen);
         } else {
-          // 🔥 SI ES UNA PROFORMA VIEJA, BUSCAMOS EL PAÍS EN EL CATÁLOGO DE PROVEEDORES
           const proveedores = await obtenerProveedores();
           const prov = proveedores.find(p => p.nombre === proforma.proveedor);
           if (prov && prov.pais) {
@@ -76,9 +78,15 @@ export default function CotizacionesFlete({ expediente }) {
       setIncoterm(cotizacion.incoterm || 'FOB');
       setTipoContenedor(cotizacion.tipoContenedor || '40HC');
       setCantidadContenedores(cotizacion.cantidadContenedores || 1);
-      setDiasLibresOrigen(cotizacion.diasLibresOrigen || 0);
-      setDiasLibresDestino(cotizacion.diasLibresDestino || 15);
       
+      setFrecuencia(cotizacion.frecuencia || 'SEMANAL');
+      setCondicionPago(cotizacion.condicionPago || 'CONTADO');
+      setFechaVigencia(cotizacion.fechaVigencia || '');
+      setDiasSobrestadia(cotizacion.diasSobrestadia || 0);
+      setDiasAlmacenaje(cotizacion.diasAlmacenaje || 0);
+      setAlmacenDestino(cotizacion.almacenDestino || '');
+      setTransitTime(cotizacion.transitTime || 0); // 🔥 Cargar TT
+
       setPuertoOrigen(cotizacion.puertoOrigen || '');
       setPuertoDestino(cotizacion.puertoDestino || 'Callao (PECLL)');
 
@@ -93,10 +101,14 @@ export default function CotizacionesFlete({ expediente }) {
       setIncoterm('FOB');
       setTipoContenedor('40HC');
       setCantidadContenedores(1);
-      setDiasLibresOrigen(0);
-      setDiasLibresDestino(15);
       
-      // 🔥 AQUÍ ESTABA EL ERROR: Ya no reseteamos a 'CN', dejamos que se mantenga el de la proforma
+      setFrecuencia('SEMANAL');
+      setCondicionPago('CONTADO');
+      setFechaVigencia('');
+      setDiasSobrestadia(0);
+      setDiasAlmacenaje(0);
+      setAlmacenDestino('');
+      setTransitTime(0); // 🔥 Resetear TT
 
       setPuertoOrigen('');
       setPuertoDestino('Callao (PECLL)');
@@ -140,10 +152,14 @@ export default function CotizacionesFlete({ expediente }) {
     if (bloque === 'destino') setConceptosDestino(conceptosDestino.filter((_, i) => i !== index));
   };
 
-  const calcTotal = (lista) => lista.reduce((sum, item) => sum + (Number(item.cantidad) * Number(item.tarifa)), 0);
-  const totalOrigen = calcTotal(conceptosOrigen);
-  const totalFlete = calcTotal(conceptosFlete);
-  const totalDestino = calcTotal(conceptosDestino);
+  const calcSubtotal = (lista) => lista.reduce((sum, item) => sum + (Number(item.cantidad) * Number(item.tarifa)), 0);
+  const calcIGV = (lista) => lista.reduce((sum, item) => item.incluyeIGV ? sum + ((Number(item.cantidad) * Number(item.tarifa)) * 0.18) : sum, 0);
+
+  const totalOrigen = calcSubtotal(conceptosOrigen);
+  const totalFlete = calcSubtotal(conceptosFlete);
+  const subtotalDestino = calcSubtotal(conceptosDestino);
+  const igvDestino = calcIGV(conceptosDestino);
+  const totalDestino = subtotalDestino + igvDestino;
   const totalGeneral = totalOrigen + totalFlete + totalDestino;
 
   const handleGuardar = async (e) => {
@@ -151,10 +167,6 @@ export default function CotizacionesFlete({ expediente }) {
     
     if (!agenteId) {
       alert("Por favor, selecciona un agente de carga.");
-      return;
-    }
-    if (conceptosFlete.length === 0 && conceptosDestino.length === 0 && conceptosOrigen.length === 0) {
-      alert("Por favor, agrega al menos un concepto (Flete, Origen o Destino).");
       return;
     }
 
@@ -167,16 +179,26 @@ export default function CotizacionesFlete({ expediente }) {
       agenteNombre: agenteSeleccionado?.nombre || 'Desconocido',
       modalidad, naviera, incoterm, tipoContenedor,
       cantidadContenedores: Number(cantidadContenedores),
-      diasLibresOrigen: Number(diasLibresOrigen),
-      diasLibresDestino: Number(diasLibresDestino),
       
-      paisOrigen: paisOrigenProforma, // 🔥 Heredado de la Proforma
+      frecuencia, condicionPago, fechaVigencia, 
+      diasSobrestadia: Number(diasSobrestadia), 
+      diasAlmacenaje: Number(diasAlmacenaje), 
+      almacenDestino,
+      transitTime: Number(transitTime), // 🔥 Guardar TT
+
+      paisOrigen: paisOrigenProforma,
       puertoOrigen, puertoDestino,
 
       conceptosOrigen: procesarLista(conceptosOrigen),
       conceptosFlete: procesarLista(conceptosFlete),
       conceptosDestino: procesarLista(conceptosDestino),
-      totalOrigen, totalFlete, totalDestino, totalGeneral
+      
+      totalOrigen, 
+      totalFlete, 
+      subtotalDestino,
+      igvDestino, 
+      totalDestino, 
+      totalGeneral
     };
 
     try {
@@ -193,12 +215,12 @@ export default function CotizacionesFlete({ expediente }) {
       setMostrarModal(false);
     } catch (error) {
       console.error(error);
-      alert("Hubo un error al guardar. Revisa la consola.");
+      alert("Hubo un error al guardar.");
     }
   };
 
   const handleEliminar = async () => {
-    if (window.confirm("¿Estás seguro de que deseas eliminar esta cotización? Esta acción no se puede deshacer.")) {
+    if (window.confirm("¿Estás seguro de que deseas eliminar esta cotización?")) {
       try {
         await deleteDoc(doc(db, 'cotizacionesFlete', cotizacionEditandoId));
         const dataCot = await obtenerCotizacionesPorExpediente(expediente.id);
@@ -206,7 +228,6 @@ export default function CotizacionesFlete({ expediente }) {
         setMostrarModal(false);
       } catch (error) {
         console.error("Error al eliminar:", error);
-        alert("No se pudo eliminar la cotización.");
       }
     }
   };
@@ -216,7 +237,7 @@ export default function CotizacionesFlete({ expediente }) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Cotizaciones de Flete</h2>
-          <p className="text-slate-500">Registra tarifas unitarias con lógica automática de U/M (BL / Contenedor).</p>
+          <p className="text-slate-500">Registra tarifas unitarias con lógica automática de U/M y cálculo de IGV.</p>
         </div>
         <button onClick={() => abrirModal(null)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
           <Plus className="w-5 h-5" /> Nueva Cotización
@@ -244,7 +265,8 @@ export default function CotizacionesFlete({ expediente }) {
               </div>
               <div className="space-y-2 text-sm text-slate-600">
                 <div className="flex items-center gap-2"><Ship className="w-4 h-4"/> {cot.modalidad} / {cot.naviera} / {cot.tipoContenedor}</div>
-                <div className="flex items-center gap-2"><Calendar className="w-4 h-4"/> Días Libres: {cot.diasLibresOrigen} origen / {cot.diasLibresDestino} destino</div>
+                <div className="flex items-center gap-2"><Clock className="w-4 h-4"/> TT: {cot.transitTime || 'N/A'} días | Pago: {cot.condicionPago}</div>
+                <div className="flex items-center gap-2"><Calendar className="w-4 h-4"/> Sobrestadía: {cot.diasSobrestadia} días / Almacenaje: {cot.diasAlmacenaje} días</div>
               </div>
             </div>
           ))}
@@ -272,8 +294,7 @@ export default function CotizacionesFlete({ expediente }) {
             
             <form onSubmit={handleGuardar} className="space-y-6">
               
-              {/* CABECERA EXPANDIDA (5 columnas) */}
-              <div className="grid grid-cols-5 gap-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
+              <div className="grid grid-cols-4 gap-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-slate-700 mb-1">Agente</label>
                   <select required value={agenteId} onChange={(e) => setAgenteId(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
@@ -300,29 +321,51 @@ export default function CotizacionesFlete({ expediente }) {
                     <option value="CIF">CIF</option>
                   </select>
                 </div>
+                
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Naviera/Aerolínea</label>
                   <input type="text" value={naviera} onChange={(e) => setNaviera(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="Ej. ONE, Maersk" />
                 </div>
-
-                {/* 🔥 PAÍS DE ORIGEN (SOLO LECTURA) */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">País Origen (Proforma)</label>
-                  <div className="w-full px-2 py-1.5 bg-slate-200 border border-slate-300 rounded text-sm font-bold flex items-center gap-2 text-slate-700">
-                    <img src={`https://flagcdn.com/w20/${paisOrigenProforma.toLowerCase()}.png`} alt="Bandera" className="w-5 h-3" />
-                    {paisOrigenProforma}
-                  </div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Condición de Pago</label>
+                  <select value={condicionPago} onChange={(e) => setCondicionPago(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
+                    <option value="CONTADO">Contado</option>
+                    <option value="CREDITO 15">Crédito 15 días</option>
+                    <option value="CREDITO 30">Crédito 30 días</option>
+                    <option value="CREDITO 45">Crédito 45 días</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Frecuencia</label>
+                  <select value={frecuencia} onChange={(e) => setFrecuencia(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
+                    <option value="SEMANAL">Semanal</option>
+                    <option value="QUINCENAL">Quincenal</option>
+                    <option value="MENSUAL">Mensual</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Vigencia (Fecha)</label>
+                  <input type="date" value={fechaVigencia} onChange={(e) => setFechaVigencia(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                </div>
+
+                {/* 🔥 NUEVO CAMPO: TRANSIT TIME */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Transit Time (Días)</label>
+                  <input type="number" value={transitTime} onChange={(e) => setTransitTime(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="Ej. 30" />
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">POL (Puerto Origen)</label>
-                  <input type="text" value={puertoOrigen} onChange={(e) => setPuertoOrigen(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="Ej. Manzanillo" />
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Almacén Destino</label>
+                  <input type="text" value={almacenDestino} onChange={(e) => setAlmacenDestino(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="Ej. UNIMAR" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">POD (Puerto/Aeropuerto Destino)</label>
-                  <input type="text" value={puertoDestino} onChange={(e) => setPuertoDestino(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="Ej. Callao o Jorge Chávez" />
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Días Sobrestadía</label>
+                  <input type="number" value={diasSobrestadia} onChange={(e) => setDiasSobrestadia(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
                 </div>
-
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Días Almacenaje</label>
+                  <input type="number" value={diasAlmacenaje} onChange={(e) => setDiasAlmacenaje(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Cant. Contenedores</label>
                   <input type="number" min="1" value={cantidadContenedores} onChange={(e) => setCantidadContenedores(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
@@ -337,23 +380,21 @@ export default function CotizacionesFlete({ expediente }) {
                     <option value="AEREO">Aéreo</option>
                   </select>
                 </div>
-                <div className="flex gap-2 col-span-2">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-700 mb-1">Días Origen</label>
-                    <input type="number" value={diasLibresOrigen} onChange={(e) => setDiasLibresOrigen(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-700 mb-1">Días Destino</label>
-                    <input type="number" value={diasLibresDestino} onChange={(e) => setDiasLibresDestino(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">POL (Puerto Origen)</label>
+                  <input type="text" value={puertoOrigen} onChange={(e) => setPuertoOrigen(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="Ej. Manzanillo" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">POD (Puerto Destino)</label>
+                  <input type="text" value={puertoDestino} onChange={(e) => setPuertoDestino(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="Ej. Callao o Jorge Chávez" />
                 </div>
               </div>
 
-              {/* BLOQUES */}
+              {/* BLOQUES DE CONCEPTOS */}
               {[
-                { key: 'origen', titulo: 'Gastos en Origen (EXW/FCA)', tipoCat: 'origen', lista: conceptosOrigen, total: totalOrigen },
-                { key: 'flete', titulo: 'Flete Internacional', tipoCat: 'flete', lista: conceptosFlete, total: totalFlete },
-                { key: 'destino', titulo: 'Gastos en Destino (Locales)', tipoCat: 'destino', lista: conceptosDestino, total: totalDestino }
+                { key: 'origen', titulo: 'Gastos en Origen (EXW/FCA)', tipoCat: 'origen', lista: conceptosOrigen, subtotal: totalOrigen, igv: 0, total: totalOrigen },
+                { key: 'flete', titulo: 'Flete Internacional', tipoCat: 'flete', lista: conceptosFlete, subtotal: totalFlete, igv: 0, total: totalFlete },
+                { key: 'destino', titulo: 'Gastos en Destino (Locales)', tipoCat: 'destino', lista: conceptosDestino, subtotal: subtotalDestino, igv: igvDestino, total: totalDestino }
               ].map((bloque) => (
                 <div key={bloque.key}>
                   <div className="flex justify-between items-center mb-2">
@@ -429,6 +470,13 @@ export default function CotizacionesFlete({ expediente }) {
                           ))}
                         </tbody>
                       </table>
+                      {bloque.key === 'destino' && (
+                        <div className="flex justify-end gap-6 mt-2 pt-2 border-t border-slate-200 text-sm">
+                          <div className="flex gap-2"><span className="text-slate-500">Subtotal:</span> <span className="font-medium">${bloque.subtotal.toFixed(2)}</span></div>
+                          <div className="flex gap-2"><span className="text-slate-500">IGV (18%):</span> <span className="font-medium">${bloque.igv.toFixed(2)}</span></div>
+                          <div className="flex gap-2 font-bold text-slate-800"><span>Total Destino:</span> <span>${bloque.total.toFixed(2)}</span></div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -436,7 +484,7 @@ export default function CotizacionesFlete({ expediente }) {
 
               <div className="bg-blue-50 p-4 rounded-lg flex justify-between items-center border border-blue-100">
                 <div className="text-sm text-blue-800">
-                  Origen: USD {totalOrigen.toFixed(2)} | Flete: USD {totalFlete.toFixed(2)} | Destino: USD {totalDestino.toFixed(2)}
+                  Origen: USD {totalOrigen.toFixed(2)} | Flete: USD {totalFlete.toFixed(2)} | Destino (con IGV): USD {totalDestino.toFixed(2)}
                 </div>
                 <div className="text-xl font-bold text-blue-900">
                   Total General: USD {totalGeneral.toFixed(2)}
